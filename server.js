@@ -8,14 +8,28 @@ app.get('/', function(req, res){
 });
 
 io.on('connection', function(socket){
-  socket.emit('initial_file',fs.readFileSync(process.argv[2]).toString());
-  fs.watch(__dirname+"/inp",function(c,p) {
-    data = fs.readFileSync(process.argv[2]).toString().split('\n');
-    lastLine = data[data.length-1];
-    socket.emit('update',lastLine);
+  var initial_file = fs.readFileSync(process.argv[2]);
+  socket.emit('initial_file',initial_file.toString());
+  var position = initial_file.length;
+  fs.watch(process.argv[2], function(curr,prev) {
+    fs.open(process.argv[2], 'r', function(err, fd) {
+      fs.fstat(fd,function(err,stats) {
+        var bufferSize = stats.size - position;
+        if (bufferSize > 0) {
+          var buffer = new Buffer(bufferSize);
+          fs.readSync(fd, buffer, 0, bufferSize, position);
+          var arr = buffer.toString('utf8',0,bufferSize).split('\n');
+          for (var i=0;i<arr.length;i++) {
+            if (arr[i].length > 0)
+              socket.emit('update',arr[i]);
+          }
+        }
+        position = stats.size;
+      });
+    });
   });
-
 });
+
 
 http.listen(3000, function(){
   console.log('Listening on port 3000');
